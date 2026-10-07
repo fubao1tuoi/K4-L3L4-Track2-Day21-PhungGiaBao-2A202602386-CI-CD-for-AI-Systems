@@ -51,6 +51,7 @@ jobs:
       id-token: write
     outputs:
       f1: ${{ steps.read_report.outputs.f1 }}
+      previous_f1: ${{ steps.previous_report.outputs.f1 }}
 
     steps:
       - uses: actions/checkout@v4
@@ -72,7 +73,20 @@ jobs:
         run: dvc pull data/train_batch1.csv.dvc data/holdout.csv.dvc
 
       - name: Train model
-        run: python src/train.py
+        env:
+          MLFLOW_TRACKING_URI: ${{ secrets.DAGSHUB_MLFLOW_URI }}
+          MLFLOW_TRACKING_USERNAME: ${{ secrets.DAGSHUB_USERNAME }}
+          MLFLOW_TRACKING_PASSWORD: ${{ secrets.DAGSHUB_TOKEN }}
+        run: |
+          if [ -z "$MLFLOW_TRACKING_URI" ]; then
+            unset MLFLOW_TRACKING_URI
+            unset MLFLOW_TRACKING_USERNAME
+            unset MLFLOW_TRACKING_PASSWORD
+            echo "DagsHub secrets are not configured; using the local MLflow store."
+          else
+            echo "Using remote MLflow tracking on DagsHub."
+          fi
+          python src/train.py
 
       - name: Read report
         id: read_report
@@ -80,26 +94,38 @@ jobs:
           F1=$(python -c "import json; d=json.load(open('outputs/report.json')); print(d['f1_score'])")
           echo "f1=$F1" >> "$GITHUB_OUTPUT"
 
-      - name: Upload model to Cloud Storage
+      - name: Read current production report
+        id: previous_report
         env:
           ARTIFACT_BUCKET: ${{ secrets.ARTIFACT_BUCKET }}
         run: |
           python - <<'PYEOF'
+          import json
           import os
           from google.cloud import storage
 
           client = storage.Client()
           bucket = client.bucket(os.environ["ARTIFACT_BUCKET"])
-          blob = bucket.blob("artifacts/current/model.joblib")
-          blob.upload_from_filename("models/model.joblib")
-          print("Uploaded model.joblib successfully")
+          blob = bucket.blob("artifacts/current/report.json")
+          old_f1 = ""
+          if blob.exists():
+              report = json.loads(blob.download_as_text())
+              old_f1 = str(report["f1_score"])
+              print(f"Current production f1_score: {float(old_f1):.4f}")
+          else:
+              print("No production report found; this is the first guarded release.")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as output:
+              output.write(f"f1={old_f1}\n")
           PYEOF
 
-      - name: Save report as artifact
+      - name: Save deployment bundle as artifact
         uses: actions/upload-artifact@v4
         with:
           name: report
-          path: outputs/report.json
+          path: |
+            outputs/report.json
+            outputs/detail.txt
+            models/model.joblib
 
 
   # ---------------------------------------------------------------------------
@@ -122,11 +148,28 @@ jobs:
         run: |
           python - <<'PYEOF'
           f1 = float("${{ needs.train.outputs.f1 }}")
+          previous_f1_text = "${{ needs.train.outputs.previous_f1 }}"
           if f1 < 0.65:
               raise SystemExit(
                   f"FAILED: f1_score {f1:.4f} < 0.65. Huy trien khai."
               )
-          print(f"PASSED: f1_score {f1:.4f} >= 0.65. Dang trien khai model.")
+          print(f"PASSED: f1_score {f1:.4f} >= 0.65.")
+
+          if previous_f1_text:
+              previous_f1 = float(previous_f1_text)
+              print(
+                  f"Rollback gate: candidate={f1:.4f}, "
+                  f"production={previous_f1:.4f}"
+              )
+              if f1 < previous_f1:
+                  raise SystemExit(
+                      f"FAILED: candidate f1_score {f1:.4f} < "
+                      f"production {previous_f1:.4f}. Giu nguyen model hien tai."
+                  )
+          else:
+              print("Rollback gate: no production baseline; allowing first release.")
+
+          print("PASSED: quality and rollback gates. Dang trien khai model.")
           PYEOF
 
 
@@ -139,7 +182,58 @@ jobs:
     name: Release
     needs: quality-gate
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
     steps:
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Authenticate to Cloud Storage
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: aitc-track2
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+
+      - name: Download deployment bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: report
+          path: release-bundle
+
+      - name: Upload approved model and reports
+        env:
+          ARTIFACT_BUCKET: ${{ secrets.ARTIFACT_BUCKET }}
+        run: |
+          pip install google-cloud-storage==2.16.0
+          python - <<'PYEOF'
+          import os
+          from google.cloud import storage
+
+          client = storage.Client()
+          bucket = client.bucket(os.environ["ARTIFACT_BUCKET"])
+          uploads = {
+              "release-bundle/models/model.joblib": "artifacts/current/model.joblib",
+              "release-bundle/outputs/report.json": "artifacts/current/report.json",
+              "release-bundle/outputs/detail.txt": "artifacts/current/detail.txt",
+          }
+          for source, destination in uploads.items():
+              bucket.blob(destination).upload_from_filename(source)
+              print(f"Uploaded {source} -> {destination}")
+          PYEOF
+
+      - name: Copy serving code to VM
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SERVER_SSH_KEY }}
+          source: src/serve.py
+          target: /home/${{ secrets.SERVER_USER }}
 
       - name: SSH deploy to VM
         uses: appleboy/ssh-action@v1.0.3

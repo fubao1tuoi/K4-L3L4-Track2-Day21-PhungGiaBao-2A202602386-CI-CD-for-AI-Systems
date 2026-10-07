@@ -1,5 +1,6 @@
 import os
 import json
+import joblib
 import mlflow
 import numpy as np
 import pandas as pd
@@ -74,7 +75,11 @@ def test_report_file_created(tmp_path):
     with open("outputs/report.json") as f:
         report = json.load(f)
     assert "f1_score" in report
+    assert "f1_score_default" in report
     assert "accuracy" in report
+    assert 0.1 <= report["decision_threshold"] <= 0.9
+    assert "drift_detected" in report
+    assert os.path.exists("outputs/detail.txt")
 
 
 def test_model_file_created(tmp_path):
@@ -87,3 +92,6 @@ def test_model_file_created(tmp_path):
     )
 
     assert os.path.exists("models/model.joblib")
+    artifact = joblib.load("models/model.joblib")
+    assert "model" in artifact
+    assert "decision_threshold" in artifact

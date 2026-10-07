@@ -20,13 +20,13 @@
 
 **Bộ siêu tham số đã chọn:** `n_estimators=200`, `learning_rate=0.1`, `max_depth=5`.
 
-**Lý do:** Lần chạy 3 được chọn vì `f1_score=0.7149` cao nhất và vượt ngưỡng 0.65. Lần chạy 1 có accuracy cao nhất (0.878) nhưng F1 thấp hơn (0.7109), chứng tỏ accuracy chưa phản ánh đầy đủ khả năng nhận diện lớp thu nhập cao. Khi giảm số cây, tốc độ học và độ sâu ở lần 2, cả hai chỉ số đều giảm. Tăng từ 100 lên 200 cây và độ sâu từ 3 lên 5 chỉ cải thiện F1 nhẹ nhưng làm accuracy giảm nhẹ, thể hiện sự đánh đổi giữa nhận diện lớp dương và hiệu quả tổng thể.
+**Lý do:** Lần 3 được chọn vì F1 0.7149 cao nhất và vượt ngưỡng 0.65. Lần 1 có accuracy cao nhất nhưng F1 thấp hơn, cho thấy accuracy chưa phản ánh tốt lớp thiểu số. Cấu hình yếu ở lần 2 làm cả hai chỉ số giảm; tăng số cây và độ sâu chỉ cải thiện F1 nhẹ nhưng giảm nhẹ accuracy.
 
 ---
 
 ## 2. Vì Sao Ngưỡng Chất Lượng Đặt Trên F1 Chứ Không Phải Accuracy
 
-Lớp thu nhập trên 50K chỉ chiếm 24,8% dữ liệu, nên mô hình luôn dự đoán “thu nhập thấp” vẫn đạt accuracy khoảng 75,2% dù không phát hiện lớp dương. Accuracy vì vậy dễ gây hiểu nhầm. F1 kết hợp precision và recall, phản ánh cả độ chính xác khi dự đoán thu nhập cao và khả năng không bỏ sót nhóm này. Lab dùng `f1_score(y_eval, preds)` cho `target=1`, không dùng weighted F1 vì lớp đa số sẽ chi phối kết quả. Macro F1 phù hợp khi cần coi hai lớp ngang nhau, còn quality gate này tập trung trực tiếp vào lớp thu nhập cao. Vì vậy ngưỡng `f1_score >= 0.65` phù hợp hơn accuracy.
+Lớp thu nhập trên 50K chỉ chiếm 24,8%, nên mô hình luôn đoán “thu nhập thấp” vẫn đạt accuracy 75,2% dù không phát hiện lớp dương. F1 kết hợp precision và recall, đo cả độ chính xác lẫn khả năng không bỏ sót nhóm thu nhập cao. Lab tính trực tiếp cho `target=1`; weighted F1 không phù hợp vì bị lớp đa số chi phối, còn macro F1 coi hai lớp ngang nhau. Vì quality gate tập trung vào lớp dương, ngưỡng F1 0.65 có ý nghĩa hơn accuracy.
 
 ---
 
@@ -34,9 +34,9 @@ Lớp thu nhập trên 50K chỉ chiếm 24,8% dữ liệu, nên mô hình luôn
 
 | Khó khăn | Nguyên nhân | Cách giải quyết |
 |---|---|---|
-| MLflow lỗi dependency | MLflow 2.13 xung đột với Setuptools 82+ và SQLAlchemy 2.1 | Pin `setuptools==80.9.0`, `SQLAlchemy==2.0.54`; dùng venv riêng. |
-| Không tạo được `sa-key.json` | Organization Policy cấm Service Account key | Dùng ADC, Workload Identity Federation và Service Account gắn vào VM. |
-| SCP/POST JSON lỗi trên PowerShell | Thiếu thư mục đích và cách xử lý dấu nháy khác Bash | Tạo thư mục trước; dùng `curl.exe` với JSON đã escape. |
+| MLflow lỗi dependency | Xung đột Setuptools/SQLAlchemy | Pin phiên bản tương thích và dùng venv riêng. |
+| Không tạo được `sa-key.json` | Organization Policy cấm key | Dùng ADC, WIF và Service Account gắn VM. |
+| SCP/JSON lỗi trên PowerShell | Khác biệt đường dẫn/dấu nháy | Tạo thư mục trước; escape JSON cho `curl.exe`. |
 
 ---
 
@@ -47,4 +47,14 @@ Lớp thu nhập trên 50K chỉ chiếm 24,8% dữ liệu, nên mô hình luôn
 | Bước 2 (chỉ `train_batch1`) | 0.7149 | 0.874 |
 | Bước 3 (thêm `train_batch2`) | 0.7354 | 0.882 |
 
-**Nhận xét:** Sau khi bổ sung `train_batch2`, F1 tăng 0.0205 và accuracy tăng 0.008. Dữ liệu lớn hơn giúp nhận diện lớp thu nhập cao tốt hơn, nhưng mức tăng vừa phải vì hai batch cùng phân phối.
+**Nhận xét:** Thêm `train_batch2` làm F1 tăng 0.0205 và accuracy tăng 0.008. Mức tăng vừa phải vì hai batch cùng phân phối.
+
+---
+
+## 5. Phần Bonus Đã Thực Hiện
+
+- [ ] Bonus 1 - DagsHub: workflow đã hỗ trợ remote tracking; chờ cấu hình ba GitHub Secrets DagsHub.
+- [x] Bonus 2 - Điều chỉnh ngưỡng: quét 0.1–0.9, chọn 0.30; F1 tăng từ 0.7354 lên 0.7537.
+- [x] Bonus 3 - Precision/recall: lưu confusion matrix và chỉ số từng lớp trong `detail.txt`; ưu tiên recall lớp cao để giảm bỏ sót.
+- [x] Bonus 4 - Rollback: chỉ upload và restart khi F1 ứng viên không thấp hơn report production trên bucket.
+- [x] Bonus 5 - Data drift: cảnh báo khi tỷ lệ lớp dương lệch quá 5% so với mốc 24,8%.
