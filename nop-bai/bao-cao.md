@@ -27,13 +27,13 @@ HƯỚNG DẪN - đọc rồi XÓA TOÀN BỘ các khối chú thích này sau k
 
 | Lần chạy | n_estimators | learning_rate | max_depth | f1_score | accuracy |
 |---|---|---|---|---|---|
-| 1 | ___ | ___ | ___ | ___ | ___ |
-| 2 | ___ | ___ | ___ | ___ | ___ |
-| 3 | ___ | ___ | ___ | ___ | ___ |
+| 1 | 100 | 0.1 | 3 | 0.7109 | 0.878 |
+| 2 | 50 | 0.05 | 2 | 0.6051 | 0.846 |
+| 3 | 200 | 0.1 | 5 | 0.7149 | 0.874 |
 
-**Bộ siêu tham số đã chọn:** `n_estimators=___`, `learning_rate=___`, `max_depth=___`.
+**Bộ siêu tham số đã chọn:** `n_estimators=200`, `learning_rate=0.1`, `max_depth=5`.
 
-**Lý do:** ___
+**Lý do:** Lần chạy 3 được chọn vì đạt `f1_score=0.7149`, cao nhất trong ba lần thử và vượt ngưỡng chất lượng 0.65. Lần chạy 1 có accuracy cao nhất (0.878) nhưng F1 thấp hơn (0.7109), cho thấy accuracy không phản ánh đầy đủ khả năng nhận diện lớp thu nhập cao vốn chiếm tỷ lệ nhỏ. Khi giảm `n_estimators`, `learning_rate` và `max_depth` ở lần chạy 2, cả F1 và accuracy đều giảm rõ rệt; mô hình yếu hơn đã học chưa đủ từ dữ liệu. Tăng số cây từ 100 lên 200 và độ sâu từ 3 lên 5 chỉ cải thiện F1 nhẹ, đồng thời accuracy giảm nhẹ, thể hiện sự đánh đổi giữa khả năng nhận diện lớp dương, độ phức tạp mô hình và hiệu quả tổng thể.
 
 <!--
 Trả lời trong phần Lý do:
