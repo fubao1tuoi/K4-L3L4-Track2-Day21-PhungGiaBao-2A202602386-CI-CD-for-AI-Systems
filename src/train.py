@@ -39,6 +39,10 @@ def train(
         f1 (float): diem F1 cua lop duong (thu nhap > 50K) tren tap holdout.
     """
 
+    experiment_name = os.getenv("MLFLOW_EXPERIMENT_NAME")
+    if experiment_name:
+        mlflow.set_experiment(experiment_name)
+
     df_train = pd.read_csv(data_path)
     df_eval = pd.read_csv(eval_path)
 
