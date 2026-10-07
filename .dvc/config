@@ -1,0 +1,4 @@
+[core]
+    remote = labstore
+['remote "labstore"']
+    url = gs://aitc-track2-income-lab-2a202602386/dvc
