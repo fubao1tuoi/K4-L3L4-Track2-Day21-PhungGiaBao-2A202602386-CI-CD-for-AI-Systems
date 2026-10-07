@@ -53,7 +53,7 @@ Lớp thu nhập trên 50K chỉ chiếm 24,8%, nên mô hình luôn đoán “t
 
 ## 5. Phần Bonus Đã Thực Hiện
 
-- [ ] Bonus 1 - DagsHub: workflow đã hỗ trợ remote tracking; chờ cấu hình ba GitHub Secrets DagsHub.
+- [x] Bonus 1 - DagsHub: GitHub Actions ghi run `income-model` cùng tham số, metrics và model lên MLflow từ xa.
 - [x] Bonus 2 - Điều chỉnh ngưỡng: quét 0.1–0.9, chọn 0.30; F1 tăng từ 0.7354 lên 0.7537.
 - [x] Bonus 3 - Precision/recall: lưu confusion matrix và chỉ số từng lớp trong `detail.txt`; ưu tiên recall lớp cao để giảm bỏ sót.
 - [x] Bonus 4 - Rollback: chỉ upload và restart khi F1 ứng viên không thấp hơn report production trên bucket.
